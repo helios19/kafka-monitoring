@@ -42,5 +42,5 @@ You should then be able to see the random messages generated coming up into kafk
 
 To monitor kafka, check Prometheus and Grafana dashboard:
 * Prometheus: http://localhost:9090/
-* Graphana: http://localhost:3000/
+* Grafana: http://localhost:3000/
 
