@@ -16,6 +16,7 @@ services:
 
   burrow-exporter:
     image: solsson/burrow-exporter:latest
+#    image: bridg/burrow-prometheus-exporter
     hostname: burrow-exporter
     container_name: burrow-exporter
     depends_on:
@@ -30,6 +31,42 @@ services:
       INTERVAL: "30"
       API_VERSION: "2"
 
+  zk-exporter:
+    image: my/zk-exporter:latest
+    hostname: zk-exporter
+    container_name: zk-exporter
+    depends_on:
+      - broker
+      - zookeeper
+    ports:
+      - "9120:9120"
+
+  nodeexporter:
+    image: prom/node-exporter:v0.16.0
+    container_name: nodeexporter
+    user: root
+    privileged: true
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    expose:
+      - 9100
+#    network_mode: bridge
+#    networks:
+#      - host
+#      - monitor-net
+    labels:
+      org.label-schema.group: "monitoring"
+
+
   kafka-exporter:
     image: danielqsj/kafka-exporter
     hostname: kafka-exporter
@@ -38,6 +75,8 @@ services:
       - broker
       - zookeeper
       - my-burrow
+    ports:
+      - "9308:9308"
 #    networks:
 #      - monitoring
     command: --kafka.server=broker:9092
@@ -125,15 +164,34 @@ services:
 
 
 
+  kafka-generic-consumer:
+    image: com.ing.kafka.generic.processor/kafka-generic-processor:0.0.1-SNAPSHOT
+    hostname: kafka-generic-consumer
+    container_name: kafka-generic-consumer
+    depends_on:
+      - broker
+    ports:
+      - "8282:8080"
+    environment:
+      BROKERS: 'http://broker:9092'
+      SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      TOPICS: 'pageviews'
+      MODE: 'consumer'
+
+
+
   zookeeper:
     image: confluentinc/cp-zookeeper:5.0.0
     hostname: zookeeper
     container_name: zookeeper
     ports:
       - "2181:2181"
+    volumes:
+      - $PWD/jmx-exporter-agent:/usr/app/zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      EXTRA_ARGS: "-javaagent:/usr/app/zookeeper/jmx_prometheus_javaagent-0.3.1.jar=7070:/usr/app/zookeeper/zookeeper.yml"
 
   broker:
     image: confluentinc/cp-enterprise-kafka:5.0.0
@@ -159,7 +217,7 @@ services:
       CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
       CONFLUENT_METRICS_ENABLE: 'true'
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
-      KAFKA_OPTS: "-javaagent:/usr/app/kafka/jmx_prometheus_javaagent-0.9.jar=7072:/usr/app/kafka/kafka-0-8-2.yml"
+      KAFKA_OPTS: "-javaagent:/usr/app/kafka/jmx_prometheus_javaagent-0.3.1.jar=7072:/usr/app/kafka/kafka-0-8-2.yml"
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:5.6.0
@@ -218,7 +276,7 @@ services:
       - zookeeper
       - broker
     ports:
-      - "8081:8081"
+      - "8079:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: 'zookeeper:2181'
